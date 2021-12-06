@@ -1,0 +1,989 @@
+---
+title: 'Career disruption survey: summary results'
+author: "Adrian Barnett"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  word_document:
+    toc: true
+    toc_depth: 1
+    reference_docx: rmarkdown-styles-reference.docx
+---
+
+```{r setup, include=FALSE}
+# using formatting in Word document (see above)
+knitr::opts_chunk$set(echo = FALSE, warning=FALSE, message=FALSE, error=FALSE, comment='', dpi=400)
+options(width=1000) # Wide pages
+options(scipen=999) # avoid scientific presentation
+source('99_functions.R')
+library(dplyr)
+library(tidyr)
+library(janitor) # for tables with column totals
+library(stringr)
+library(MASS) # for ordinal logistic regression
+library(broom) # for regression model estimates
+library(flextable) # for nice tables
+library(MKinfer) # for bootstrap t-test
+library(visdat) # for missing data
+library(naniar) # for missing data
+library(diagram) # for flow diagram
+library(MultinomialCI) # for confidence intervals
+  
+# graphics things:
+library(ggplot2)
+library(cowplot)
+library(gridExtra)
+g.theme = theme_bw() + theme(panel.grid.minor = element_blank())
+cbPalette <- c("#E69F00", "#56B4E9", "#009E73", "#F0E442", "#0072B2", "#D55E00", "#999999", "#CC79A7") # colour-blind palette
+sample_colours = c('dodgerblue','darkorange') # colours for two samples
+sample_colours = c('cadetblue','gold3') # alternative colours for two samples
+bar_colours = c('mediumorchid2', 'seashell', 'darkgoldenrod2') # for disagree, neutral, agree
+bar_colours = c('deepskyblue2', 'mediumaquamarine', 'orange3') # for disagree, neutral, agree
+
+# get the data, from # 3_read_survey_data.R
+load('data/AnalysisReady.RData')
+```
+
+## Introduction
+
+All the results are stratified by the two samples: random and non-random. The total number of responses was `r nrow(data)`, with `r sum(data$sample == 'Random')` from the random sample and `r sum(data$sample == 'Non-random')` from the non-random sample.
+
+Text _in italics_ is the direct wording from the survey
+
+# _Your NHMRC activity in the last five years_
+
+## _How many NHMRC applications have you been part of in the last 5 years as a chief investigator?_
+
+```{r}
+results = make_table(indata = data, inlabels=labels, ordered=FALSE, include.missing = FALSE, 
+                   label = "q2_1", ltype='question', type='continuous', sample_colours = sample_colours)
+results$table
+# save for later
+boxplot_grant = results$plot
+```
+
+Cells show the median and inter-quartile range. 
+
+```{r}
+results$plot
+```
+
+The few results over 30 are outliers and are 6 per year. It is possible that these respondent included applications where they were an associate investigator and/or ARC applications.
+
+## _How often in those applications did you include medical or social circumstance that disrupted your research?_
+
+The results below are only for people who had at least 1 application.
+
+```{r}
+to_table = filter(data, q2_1 >= 1)
+results = make_table(indata = to_table, inlabels=labels, ordered=TRUE, add_ci = TRUE, stack = FALSE, include.missing = FALSE, label = "q2_2", ltype = 'question', type='categorical', sample_colours = sample_colours)
+results$table
+# for more detailed plot in 5_combined_plots_.R
+how_often_plot_random = results$plot_random
+how_often_plot_nonrandom = results$plot_nonrandom
+```
+
+```{r}
+results$plot
+```
+
+
+##### Confidence intervals for random sample:
+
+We give confidence intervals for the random sample in order to estimate the prevalence in the wider population.
+
+```{r}
+results$ci
+```
+
+# Knowledge of current NHMRC policies
+
+## _How aware are you of the current NHMRC policies around documenting career disruption in grant applications?_
+
+```{r}
+results = make_table(indata = data, inlabels=labels, ordered=TRUE, sample_colours = sample_colours, wrap_labels=29, stack=FALSE, label = "q3_1", ltype = 'question', type='categorical', include.missing = FALSE, rel_widths = c(1.48, 1), add_ci = TRUE)
+ftab = results$table %>%width(j=1, width=3.2) # adjust column width
+ftab
+# for more detailed plot in 5_combined_plots_.R
+aware_plot_random = results$plot_random
+aware_plot_nonrandom = results$plot_nonrandom
+```
+
+##### Confidence intervals for awareness
+
+```{r}
+results$ci
+```
+
+## _I understand what medical or social circumstances could be mentioned in an NHMRC career disruption section_
+
+```{r}
+results = make_table(indata = data, inlabels=labels, ordered=TRUE, sample_colours = sample_colours, stack=FALSE, label = "q3_2", ltype = 'question', type='categorical', include.missing = FALSE, rel_widths = c(1.38, 1))
+results$table
+# for more detailed plot in 5_combined_plots_.R
+understand_plot_random = results$plot_random
+understand_plot_nonrandom = results$plot_nonrandom
+```
+
+```{r, fig.height=3}
+results$plot
+```
+
+The non-random sample are more informed about the policy, likely because they have had to read up on them.
+
+# Current NHMRC applications
+
+## _Would you write anything in your application about disruption to your research because of medical or social circumstances in the last five years?_
+
+```{r}
+results = make_table(indata = data, inlabels=labels, ordered=TRUE, add_ci = TRUE, include.missing = FALSE,
+                   label = "q4_2", ltype = 'question', type='categorical', sample_colours = sample_colours, wrap_labels = 24, stack=FALSE, rel_widths = c(1.65, 1))
+ftab = results$table %>%
+  width(j=1, width=3) # adjust column width
+ftab
+# for more detailed plot in 5_combined_plots_.R
+write_anything_plot_random = results$plot_random
+write_anything_plot_nonrandom = results$plot_nonrandom
+```
+
+The numbers above show that career disruption applies to a relatively large number of applicants. 
+The non-random sample were much more likely to have relevant circumstances, and they were likely motivated to complete the survey because of their experiences.
+
+```{r}
+results$plot
+```
+
+##### Confidence intervals for random sample:
+
+```{r}
+tab = results$ci 
+autofit(tab)
+```
+
+
+## _Considering medical or social circumstances you would not include, is this because_
+
+The results below are ordered by the overall number of 'Agree' responses.
+
+```{r}
+results = make_table_matrix(indata = data, inlabels=labels, ordered=TRUE, ordered_row='Agree', legend = c('Disagree','Neutral','Agree'), bar_colours = bar_colours, remove = 'Considering medical or social circumstances you would not include, is this because - ', start = "q4_4", expand_zero = TRUE, include.missing = FALSE, wrap_labels = 55)
+ftab = results$table %>%
+  width(j=1, width=3) # adjust column width
+ftab
+```
+
+```{r, fig.width=8, fig.height=6}
+results$plot 
+# export
+jpeg('figures/would_not_include.jpg', width=6.5, height=4, units='in', res=600)
+print(results$plot)
+invisible(dev.off())
+# export
+postscript('figures/would_not_include.eps', width=6.5, height=4)
+print(results$plot)
+invisible(dev.off())
+```
+
+## _Considering medical or social circumstances you would include, would you_
+
+The results below are ordered by the overall number of 'Agree' responses.
+
+```{r}
+results = make_table_matrix(indata = data, inlabels=labels, ordered=TRUE, ordered_row = 'Agree',
+                            legend = c('Disagree','Neutral','Agree'),
+                            bar_colours = bar_colours,
+   remove = 'Considering medical or social circumstances you would include, would you - ', start = "q4_6", expand_zero=TRUE, include.missing = FALSE)
+ftab = results$table %>%
+  width(j=1, width=3) # adjust column width
+ftab
+```
+
+```{r, fig.width=8}
+results$plot
+# export
+jpeg('figures/would_include.jpg', width=5, height=4, units='in', res=600)
+print(results$plot)
+invisible(dev.off())
+```
+
+
+# Hypothetical NHMRC application
+
+_In this section, please consider the following hypothetical scenario and think about what you would write in the career disruption section_
+
+_Imagine you had missed six months of full-time research in the previous year because [one of 4 random scenarios]. You had no other personal or medical circumstances in the last five years._
+
+
+## _Would you write anything in the career disruption section about the six months spent away from research because of this issue?_
+
+```{r}
+for_plot = filter(data, !is.na(q5)) %>%
+  group_by(sample, q5_label, q5) %>% 
+  tally() %>%
+  group_by(sample, q5_label) %>%
+  mutate(p = prop.table(n),
+         roundp = round(100*p),
+         cell = paste(n, ' (', roundp, ')', sep='')) %>%
+  ungroup()
+tab = dplyr::select(for_plot, -n, -p, -roundp) %>%
+  pivot_wider(names_from = q5, values_from = cell) %>%
+  mutate_if(is.character, replace_zero) %>% # replace missing with zero
+  rename('Scenario' = 'q5_label') 
+# arrange rows?
+ftab = flextable(tab) %>%
+  theme_box() %>%
+  merge_v(j=1) %>%
+  autofit()
+ftab
+```
+
+```{r, fig.width=8}
+# make total for ordering
+total = filter(data, !is.na(q5)) %>%
+  group_by(q5_label, q5) %>% 
+  tally() %>%
+  filter(q5=='Yes') %>% # order by yes responses
+  ungroup() %>%
+  arrange(n) %>%
+  mutate(rown = 1:n())
+for_plot = mutate(for_plot, 
+                  q5 = factor(q5, levels=c('Yes','No')), # for ordering in legend 
+                  x = factor(q5_label, levels=total$q5_label)) # as a factor for ordering
+plot = ggplot(data=for_plot, aes(x=x, y=100*p, fill=q5)) + 
+  geom_bar(stat='identity', position='stack')+
+  scale_fill_manual(NULL, values=cbPalette)+
+  g.theme+
+  scale_x_discrete(expand = c(0,0))+
+  theme(legend.position = 'top')+
+  ylab('Percent')+
+  xlab('')+
+  coord_flip()+
+  facet_wrap(~sample, scales='free_x')
+plot
+```
+
+The plot rows are ordered by the overall frequency of "Yes". 
+
+## _Would you not write about this career disruption because_
+
+The following table is only for people who answered "No" to writing any career disruption.
+
+```{r}
+# only for those who selected no
+select_no = filter(data, q5=="No")
+#
+results = make_table_matrix(indata = select_no, inlabels=labels, ordered=TRUE, ordered_row='Agree', include.missing = FALSE, 
+                            legend = c('Disagree','Neutral','Agree'),
+                            bar_colours = bar_colours, 
+                            remove = 'Would you not write about this career disruption because - ', start = "q6_1")
+ftab = results$table %>%
+  width(j=1, width=3) # adjust column width
+ftab
+```
+
+
+## _Would you_
+
+The following table is only for people who answered "Yes" to writing any career disruption.
+
+```{r}
+### Need to stratify by scenario
+
+# only for those who selected no
+select_yes = filter(data, q5=="Yes")
+#
+results = make_table_matrix(indata = select_yes, inlabels=labels, ordered=TRUE, ordered_row='Agree',
+                            legend = c('Disagree','Neutral','Agree'),
+                            bar_colours = bar_colours,
+   remove = 'Would you - ', start = "q6_3", include.missing = FALSE)
+ftab = results$table %>%
+  width(j=1, width=3) # adjust column width
+ftab
+```
+
+
+## _How much time away from research would you include in your career disruption section because of this issue?_
+
+The following table is only for people who answered "Yes" to writing any career disruption.
+
+```{r}
+# grouped by question
+stats = filter(data, q5 == 'Yes') %>%
+  group_by(sample, q5_label) %>%
+      summarise(median = roundz(quantile(q6_5_1, 0.5, na.rm=TRUE), 1),
+                lower = roundz(quantile(q6_5_1, 0.25, na.rm=TRUE), 1),
+                upper = roundz(quantile(q6_5_1, 0.75, na.rm=TRUE), 1)) %>%
+  mutate(cell = paste(median, ' (', lower, ' to ', upper, ')', sep='')) %>%
+  dplyr::select(-median, -lower, -upper) %>%
+  pivot_wider(names_from = sample, values_from = cell)
+names(stats)[1] = 'Scenario'
+ftab = flextable(stats) %>%
+  theme_box() %>%
+  autofit()
+ftab
+```
+
+The cells show the median and inter-quartile range. 
+
+```{r, fig.width=8}
+# prepare missing and non-missing version of data
+non_imputed = filter(data, q5 == 'Yes') %>%
+  dplyr::select(q5_label, q6_5_1, sample)
+imputed = mutate(non_imputed, 
+                 q6_5_1 = ifelse(is.na(q6_5_1), 6, q6_5_1))
+for_plot = bind_rows(non_imputed, imputed, .id = 'imputed') %>%
+  mutate(imputed = factor(imputed, levels=1:2, labels=c('Imputed = No','Imputed = Yes')))
+#
+plot = ggplot(data=for_plot, aes(x=q5_label, y=q6_5_1, fill=sample))+
+  geom_boxplot()+
+  g.theme+
+  xlab('')+
+  ylab('Time away from research (months)')+
+  coord_flip()+
+  scale_y_continuous(breaks=seq(0,12,3))+
+  scale_fill_manual(NULL, values=sample_colours)+
+  facet_wrap(~imputed)
+plot
+```
+
+The two scenarios of "caring for an elderly relative" and "severe depression" generally have the lowest times.
+
+#### Estimated means by scenario
+
+The plot below shows the estimated means from a Bayesian regression model that included the scenario and the sample (random/non-random) as predictors. The plot shows the mean times and 95% credible intervals. The numbers below the means are the estimated probability that the scenario has the lowest mean. There's a high probability (0.80) that severe depression has the smallest average time adjusted, and a low probability that caring for a child or elderly relative has the smallest adjustment. 
+
+```{r}
+# use Bayesian model to estimate probability that severe depression has lowest score.
+source('4_run_bayes.R')
+
+scenarios = c('Caring for an\nelderly relative','Caring for\na child','A car accident','Severe depression')
+time_adjustment_plot = ggplot(data=overall, aes(x=scenario, y=mean, ymin=x2_5, ymax=x97_5, col=missing))+
+  geom_point(size=4, position = position_dodge(width=0.2))+
+  geom_errorbar(width=0, size=1.05, position = position_dodge(width=0.2))+
+  scale_color_manual('Missing\ndata\nimputed', values=c('darkorchid','thistle3'), labels=c('No','Yes'))+
+  scale_x_continuous(breaks=1:4, labels=scenarios)+
+  ylab('Average amount of time adjusted (months)')+
+  xlab('')+
+  theme_bw()+
+  theme(panel.grid.minor = element_blank(),
+        legend.text = element_text(size=10),
+        legend.position = c(0.89,0.82))+
+  geom_text(data=filter(overall, missing==1), aes(x=scenario, y=mean, label=roundz(min, 2), col=missing), nudge_x = -0.25)+
+  geom_text(data=filter(overall, missing==2), aes(x=scenario, y=mean, label=roundz(min, 2), col=missing), nudge_x = +0.25)+
+  coord_flip()
+time_adjustment_plot
+# export
+jpeg('figures/time_adjustment.jpg', width=5, height=4, units='in', res=600)
+print(time_adjustment_plot)
+invisible(dev.off())
+# export eps
+postscript('figures/time_adjustment.eps', width=5, height=4)
+print(time_adjustment_plot)
+invisible(dev.off())
+```
+
+# Peer reviewer section
+
+_Now imagine you are a grant peer reviewer instead of an applicant._
+
+## Adjusting track record
+
+_Imagine you are comparing two NHMRC fellowship applications for which both applicants have stated that they lost 6 months of research time in the last 5 years due to career disruption. One applicant does not give any details and the other explains their medical issue in detail_.
+
+The plot below shows the times that respondents gave for the two scenarios.
+
+```{r, fig.width=7}
+# need to jitter prior to plotting because of missing data
+to_plot = mutate(data,
+                 q7_1_1 = q7_1_1 + runif(n=n(), min=-0.2, max=0.2),
+                 q7_1_5 = q7_1_5 + runif(n=n(), min=-0.2, max=0.2))
+# labels in two corners
+label1 = data.frame(x=3, y=11, label='More time for those\nwho gave details', sample='Non-random')
+label2 = data.frame(x=8, y=1, label='Less time for those\nwho gave details', sample='Non-random')
+# version without missing data
+scatter = ggplot(data=to_plot, aes(x=q7_1_1, y=q7_1_5))+
+  geom_point(pch=1)+ #
+  scale_color_manual('Sample', values=sample_colours)+
+  geom_text(data=label1, aes(x=x, y=y, label=label), size=3)+
+  geom_text(data=label2, aes(x=x, y=y, label=label), size=3)+
+  scale_x_continuous(limits=c(NA,12), breaks=seq(0,12,3))+
+  scale_y_continuous(limits=c(NA,12), breaks=seq(0,12,3))+
+  xlab('Applicant who gave no details')+
+  ylab('Applicant who gave details')+
+  geom_abline(slope=1, intercept=0, lty=2)+
+  g.theme+
+  theme(legend.position = 'none',
+        legend.box.spacing = unit(0, 'mm'), # reduce space between plot and legend
+         legend.box.margin	= margin(t=0, r=0, b=0, l=0), # reduce space around legend
+         legend.margin = margin(t=0, r=0, b=0, l=0, unit='mm') # reduce space around legend
+         ) + # 
+  facet_wrap(~sample)
+#
+scatter = ggplot(data=to_plot, aes(x=q7_1_1, y=q7_1_5))+
+  geom_point(pch=1)+ #
+ # scale_color_manual('Sample', values=sample_colours)+
+  geom_text(data=label1, aes(x=x, y=y, label=label), size=3)+
+  geom_text(data=label2, aes(x=x, y=y, label=label), size=3)+
+  scale_x_continuous(limits=c(NA,12), breaks=seq(0,12,3))+
+  scale_y_continuous(limits=c(NA,12), breaks=seq(0,12,3))+
+  xlab('Applicant who gave no details')+
+  ylab('Applicant who explained their medical issue in detail')+
+  geom_abline(slope=1, intercept=0, lty=2)+
+  g.theme+
+  theme(legend.position = 'top',
+        legend.box.spacing = unit(0, 'mm'), # reduce space between plot and legend
+         legend.box.margin	= margin(t=0, r=0, b=0, l=0), # reduce space around legend
+         legend.margin = margin(t=0, r=0, b=0, l=0, unit='mm') # reduce space around legend
+         ) + # 
+  facet_wrap(~sample)+
+  geom_miss_point() + # add missing
+  scale_color_manual('Missing', values=c('grey','indianred1'), labels=c('Yes','No'))
+scatter
+# export
+jpeg('figures/scatter.jpg', width=5, height=4, units='in', res=600)
+print(scatter)
+invisible(dev.off())
+```
+
+The points have been jittered to avoid overlap as lots of people gave round numbers. The diagonal dotted line shows perfect agreement for the two times.
+
+The plot includes the missing results, where either both sliders were missing (dots in bottom-left) or just one slider was missing (dots along bottom or left of the plot). 
+
+## Paired difference within respondents
+
+We examine the paired differences within respondents for the time adjustment using the difference of the applicant who gave details from the applicant who gave no details.
+
+```{r, fig.width=5, fig.height=4}
+diff = mutate(data, diff = q7_1_5 - q7_1_1)
+dplot = ggplot(data=diff, aes(x=diff))+
+  geom_histogram(fill='darkseagreen', col='grey33')+
+  g.theme+
+  xlab('Difference in time (detailed minus not detailed) in months')+
+  ylab('Frequency')
+dplot
+btest = boot.t.test(x=data$q7_1_5, y=data$q7_1_1, R = 1000, mu = 0, paired = TRUE, alternative = "two.sided")
+#t.test(x=data$q7_1_5, y=data$q7_1_1, paired=TRUE, alternative = 'two.sided')
+
+# version assuming all missing are 6 (default slider)
+imp_data = mutate(data, 
+              q7_1_5 = ifelse(is.na(q7_1_5), 6, q7_1_5),
+              q7_1_1 = ifelse(is.na(q7_1_1), 6, q7_1_1) )
+btest.missing = boot.t.test(x=imp_data$q7_1_5, y=imp_data$q7_1_1, R = 1000, mu = 0, paired = TRUE, alternative = "two.sided")
+```
+
+The histogram shows many people treat the applicants equally, but whenever there is a difference there is almost always a greater time off given to those who gave the details. 
+
+A non-parametric bootstrap test of the paired difference gives a mean of `r roundz(btest$estimate,1)` months with a 95% confidence interval of `r roundz(btest$conf.int[1],1)` to `r roundz(btest$conf.int[2], digits=1)` months. So there is evidence that those giving their medical details get a larger adjustment from peer reviewers.
+
+In a sensitivity analysis we assumed that those who left the slider at the default position of six meant to answer 6. A bootstrap test of the paired difference gives a mean of `r roundz(btest.missing$estimate,1)` months with a 95% confidence interval of `r roundz(btest.missing$conf.int[1],1)` to `r roundz(btest.missing$conf.int[2], digits=1)` months 
+
+## Comfort/discomfort with reading others medical sections
+
+_Imagine you are reading a career disruption section about somebody that you know. This is not a close colleague, as conflict of interest rules would mean you could not review their application. How comfortable are you reading personal social and/or medical details as part of the peer review process?_
+
+```{r}
+results = make_table(indata = data, inlabels=labels, ordered = TRUE, stack=FALSE, wrap_labels = 19, include.missing = FALSE, label = "q7_2", ltype = 'question', type='categorical', sample_colours = sample_colours)
+results$table
+# for more detailed plot in 5_combined_plots_peer_review.R
+comfort_plot_random = results$plot_random
+comfort_plot_nonrandom = results$plot_nonrandom
+```
+
+```{r, fig.width=8}
+results$plot
+```
+
+##### Confidence interval for two uncomfortable categories combined.
+
+```{r}
+results = make_table(indata = data, inlabels=labels, ordered = FALSE, stack=FALSE, wrap_labels = 19, include.missing = FALSE, label = "comfort", ltype = 'question', type='categorical', sample_colours = sample_colours, add_ci = TRUE)
+results$ci
+```
+
+# Independent panel for assessing career disruption
+
+## _How do you think career disruption sections in NHMRC applications should be assessed?_
+
+```{r}
+results = make_table(indata = data, inlabels=labels, ordered=TRUE, stack = FALSE, wrap_labels = 19, include.missing = FALSE,  label = "q8_1", ltype = 'question', type='categorical', sample_colours = sample_colours, add_ci = TRUE)
+results$table
+# for more detailed plot in 5_combined_plots_.R
+panel_plot_random = results$plot_random
+panel_plot_nonrandom = results$plot_nonrandom
+```
+
+```{r, fig.width=8}
+results$plot
+```
+
+##### Confidence intervals for random sample:
+
+```{r}
+results$ci
+```
+
+# Respondent characteristics
+
+## Broad research area
+
+```{r}
+results = make_table(indata = data, inlabels=labels, ordered=TRUE, stack=FALSE, wrap_labels = 15, include.missing = FALSE, label = "q9_1", ltype='question', type='categorical', sample_colours = sample_colours, add_nhmrc=TRUE)
+results$table
+# for more detailed plot in 5_combined_plots_demographics.R
+research_area_plot_random = results$plot_random
+research_area_plot_nonrandom = results$plot_nonrandom
+```
+
+```{r, fig.width=8}
+print(results$plot)
+```
+
+The black dots show the percentage of applications from the four fields from 2019 data. Our response numbers have under-represented Basic Science and over-represented Public Health and Health Services Research. 
+
+## Gender
+
+```{r}
+results = make_table(indata = data, inlabels=labels, ordered=TRUE, stack=FALSE, wrap_labels = 12, rel_widths = c(1.4, 1),
+                     add_nhmrc = TRUE,
+                   label = "Gender", type='categorical', sample_colours = sample_colours, include.missing = FALSE)
+results$table
+# for more detailed plot in 5_combined_plots.R
+gender_plot_random = results$plot_random
+gender_plot_nonrandom = results$plot_nonrandom
+```
+
+```{r}
+print(results$plot)
+```
+
+There is a big difference in gender between the random and non-random samples, with many more women in the non-random sample.
+
+The black dots show the percentage of male and female applicants from 2020 data.
+
+
+## Approximate number of years in health and medical research
+
+```{r}
+results = make_table(indata = data, inlabels=labels, ordered=TRUE, stack=FALSE, rel_widths = c(1.5, 1), include.missing = FALSE, label = "q9_3", ltype='question', type='categorical', sample_colours = sample_colours)
+results$table
+# for more detailed plot in 5_combined_plots.R
+years_plot_random = results$plot_random
+years_plot_nonrandom = results$plot_nonrandom
+```
+
+```{r}
+results$plot
+```
+
+# Differences by gender
+
+In this section we look for differences in the responses by gender.
+We examine a selection of the survey questions to assess whether women were more or less likely to agree.
+We used ordinal regression for responses on an ordinal scale, such as disagree, neutral and agree.
+We used logistic regression for responses on an nominal scale and selected a particular response, e.g., support for the medical panel.
+
+```{r, fig.width=8}
+# prepare data for ordinal models
+ordinal = mutate(data, 
+         q2_2 = factor(q2_2, levels=c('Never','Rarely','Sometimes','Very Often','Always'), ordered=TRUE),
+         q7_2 = factor(q7_2, levels=c('Extremely comfortable','Somewhat comfortable','Neither comfortable nor uncomfortable','Somewhat uncomfortable','Extremely uncomfortable'), ordered=TRUE),
+         q3_1 = factor(q3_1, levels=c('I don’t know any NHMRC documents or policies on career disruption','I am aware of some of the NHMRC documents or policies on career disruption','I am fully aware of all relevant NHMRC documents and policies on career disruption'), ordered=TRUE),
+         q3_2 = factor(q3_2, levels=c('Disagree','Neutral','Agree'), ordered=TRUE),
+         q4_4_2  = factor(q4_4_2 , levels=c('Disagree','Neutral','Agree'), ordered=TRUE))
+
+## ordinal model of policy awareness
+omodel= polr(q3_1 ~ I(q9_2=='Female') , data = ordinal, Hess = TRUE)
+ests1 = tidy(omodel, conf.int = TRUE) %>%
+  filter(coef.type == 'coefficient') %>%
+  mutate(outcome = 'q3_1')
+
+## ordinal model of policy knowledge
+omodel= polr(q3_2 ~ I(q9_2=='Female') , data = ordinal, Hess = TRUE)
+ests2 = tidy(omodel, conf.int = TRUE) %>%
+  filter(coef.type == 'coefficient') %>%
+  mutate(outcome = 'q3_2')
+
+## ordinal model of frequency of writing about career disruption
+omodel= polr(q2_2 ~ I(q9_2=='Female') , data = ordinal, Hess = TRUE)
+ests3 = tidy(omodel, conf.int = TRUE) %>%
+  filter(coef.type == 'coefficient') %>%
+  mutate(outcome = 'q2_2')
+
+## logistic model of nothing to write about
+lmodel= glm(q4_2 =='No, I have no medical or social circumstances to write about' ~ I(q9_2=='Female') , data = data, family='binomial')
+ests4 = tidy(lmodel, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(outcome = 'q4_2')
+
+## logistic model of not including circumstances
+lmodel= glm(q4_2 =='No, I have medical or social circumstances but would not include them' ~ I(q9_2=='Female') , data = data, family='binomial')
+ests4.1 = tidy(lmodel, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(outcome = 'q4_2dash')
+
+## ordinal model of concern chances of winning funding
+omodel= polr(q4_4_2  ~ I(q9_2=='Female') , data = ordinal, Hess = TRUE)
+ests5 = tidy(omodel, conf.int = TRUE) %>%
+  filter(coef.type == 'coefficient') %>%
+  mutate(outcome = 'q4_4_2')
+
+## logistic model of hypothetical scenario
+lmodel= glm(q5 == 'Yes' ~ I(q9_2=='Female') , data = data, family='binomial')
+ests6 = tidy(lmodel, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(outcome = 'q5')
+
+## ordinal model of comfort reading other disruption sections
+omodel= polr(q7_2 ~ I(q9_2=='Female') , data = ordinal, Hess = TRUE)
+ests7 = tidy(omodel, conf.int = TRUE) %>%
+  filter(coef.type == 'coefficient') %>%
+  mutate(outcome = 'q7_2')
+
+## logistic model of medical panel
+lmodel= glm(q8_1 =='Independent medical panel (new system)' ~ I(q9_2=='Female') , data = data, family='binomial')
+ests8 = tidy(lmodel, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(outcome = 'q8_1')
+
+# plot ordinal results
+qlabels = c('Have policy awareness',
+           'Have policy knowledge',
+           'Included medical or social\ncircumstances in last five years',
+           'No disruption to write about\nin current application',
+           'Disruption to write about\nbut would not include it',
+           'Concern about\nwinning funding',
+           'Claim career disruption\nfor hypothetical scenario',
+           'Comfortable reading other\ndisruption sections',
+           'Support medical\npanel')
+to_plot = bind_rows(ests1, ests2, ests3, ests4, ests4.1, ests5, ests6, ests7, ests8) %>%
+  mutate(estimate = exp(estimate), # make into odds ratios
+         conf.low = exp(conf.low),
+         conf.high = exp(conf.high),
+         xlab = case_when(
+           outcome == 'q3_1' ~ 1,
+           outcome == 'q3_2' ~ 2,
+           outcome == 'q2_2' ~ 3,
+           outcome == 'q4_2' ~ 4,
+           outcome == 'q4_2dash' ~ 5,
+           outcome == 'q4_4_2' ~ 6,
+           outcome == 'q5' ~ 7,
+           outcome == 'q7_2' ~ 8,
+           outcome == 'q8_1' ~ 9
+         ),
+         xlab = factor(xlab, levels=1:9, labels = qlabels)
+         )
+# labels
+text1 = data.frame(x=0.6, y=1.05, conf.low=1, conf.high=1, label='Women more likely')
+text2 = data.frame(x=0.6, y=0.95, conf.low=1, conf.high=1, label='Women less likely')
+#
+plot = ggplot(data=to_plot, aes(x=xlab, y=estimate, ymin=conf.low, ymax=conf.high))+
+  geom_point(size=3, col='dodgerblue')+
+  geom_errorbar(width=0, size=1.1, col='dodgerblue')+
+  geom_text(data=text2, aes(x=x, y=y, label=label), adj=1, size=3, col='grey33')+
+  geom_text(data=text1, aes(x=x, y=y, label=label), adj=0, size=3, col='grey33')+
+  geom_hline(lty=2, yintercept = 1)+
+  ylab('Odds ratio')+
+  scale_y_log10(breaks=c(0.2,0.5,1,2,5))+
+  xlab('')+
+  theme_bw()+
+  theme(panel.grid.minor = element_blank())+
+  scale_x_discrete(expand = c(0.1,0))+ # to accomodate text
+  coord_flip()
+plot
+# export
+jpeg('figures/gender_odds.jpg', width=5, height=4, units='in', res=600)
+print(plot)
+invisible(dev.off())
+# export EPS
+postscript('figures/gender_odds.eps', width=5, height=4)
+print(plot)
+invisible(dev.off())
+```
+
+# Survey response results
+
+In this section we examine meta-data on the survey including the completeness and time taken.
+
+## Flow diagram (random sample)
+
+This plot shows the flow of respondents for the random sample. 
+
+```{r, fig.width=5, fig.height=6}
+# see excel sheet for numbers (`email_bounced_away.xlsx`)
+n1 = 7588 # number in the sampling frame
+n2 = 384 # number randomly selected
+n3.1 = 4 # overseas 
+n3.2 = 9 # email no longer valid 
+n3.3 = 33 # not in health and medical research
+n4 = 29 # withdrawn 
+n6 = 38 # Out of office
+n6.1 = 6 + 22 # empty response to survey (zero progress plus almost nothing, see 3_read_survey_data.R)
+n7 = 124 # Responded to random sample
+n5 = n2 - n3.1 - n3.2 - n3.3 - n4 - n6 - n6.1 - n7 # no reply or any contact
+l1 = paste('Included in sampling frame (n=', format(n1, big.mark=',') ,')', sep='')
+l2 = paste('Randomly selected (n=',n2,')', sep='')
+l3 = paste('Invalid\n-Overseas (n=',n3.1,')\n-Email invalid (n=',n3.2,')\n-Not medical (n=',n3.3,')', sep='')
+l4 = paste('Withdrawn (n=',n4,')', sep='')
+l5 = paste('Did not respond\n-Out of office (n=',n6,')\n-Empty survey (n=',n6.1,')\n-No response (n=',n5,')', sep='')
+l6 = paste('Responded (n=',n7,')', sep='')
+# wrap some strings, but not #3
+w = 20  # number of characters to wrap
+l1 = str_wrap(l1, width=w)
+l2 = str_wrap(l2, width=w)
+l4 = str_wrap(l4, width=w)
+l6 = str_wrap(l6, width=w)
+box_labels = c(l1, l2, l3, '', l4, '', l5, l6) # '' for dummy boxes
+make_flow_diagram = function(divisor){ # divisor needs to be different for markdown and jpeg
+par(mai=c(0,0,0,0))
+n_labels = length(box_labels)
+# lines
+M = matrix(nrow=n_labels, ncol=n_labels)
+M[2,1] = "' '" 
+M[3,4] = "' '" 
+M[5,6] = "' '" 
+M[7,6] = "' '" 
+M[8,2] = "' '" 
+# arrow positions
+A = matrix(nrow=n_labels, ncol=n_labels)
+A[2,1] = 0.5
+A[3,4] = 0.15
+A[5,6] = 0.15
+A[7,6] = 0.15
+A[8,2] = 0.5
+# boxes
+boxes = read.table(sep=',', header=TRUE, text='
+x,y,size,prop,colour
+0.5,0.90,1.1,0.5,white
+0.5,0.69,1,0.5,white
+0.22,0.48,1.05,0.5,white
+0.5,0.48,0,0,transparent
+0.22,0.28,1,0.5,white
+0.5,0.28,0,0,transparent
+0.78,0.28,1.1,0.5,white
+0.5,0.09,1,0.5,white')
+pos = as.matrix(dplyr::select(boxes, x, y))
+plotmat(M, name=box_labels, pos=pos, box.type = 'rect', box.size=boxes$size/divisor, box.prop = boxes$prop, curve = 0, arr.pos=A, shadow.size = 0)
+#shape::Arrows(x0=0.29, x1=0.42, y0=0.5, y1=0.5, arr.width=0.2, arr.length=0.22, arr.type='triangle')
+# heading
+#text(0.5, 0.95, "ANZCTR", font=2)
+}
+make_flow_diagram(divisor = 6.1) # smaller for Rmarkdown?
+# export
+jpeg('figures/flow_diagram.jpg', width=4, height=5, units='in', res=600)
+make_flow_diagram(divisor = 5.1)
+invisible(dev.off())
+# export
+jpeg('figures/flow_diagram.eps', width=4, height=5)
+make_flow_diagram(divisor = 5.1)
+invisible(dev.off())
+```
+
+
+## Dates
+
+```{r}
+# bar plot
+bar = ggplot(data=data, aes(x=start_date, fill=sample))+
+  geom_bar(position='stack')+
+  scale_fill_manual('Sample', values=sample_colours)+
+  g.theme +
+  theme(legend.position = c(0.8,0.8))+
+  xlab('')+
+  ylab('Frequency')
+bar
+```
+
+The survey was launched on October 10. Reminders were sent 1 and 2 weeks later to non-responders and incomplete responders in the random sample.
+
+## Survey progress as a percent
+
+The table below shows the survey progress as a percent, with the results grouped into three categories.
+
+```{r}
+#
+results = make_table(indata = data, inlabels=labels, include.missing = FALSE, sample_colours = sample_colours, label = "progress_cat", ltype = 'question', type='categorical')
+results$table
+```
+
+## Time taken
+
+Time taken in minutes to complete the survey. Cells show the median and inter-quartile range. 
+
+```{r}
+results = make_table(indata = data, inlabels=labels, digits=0, include.missing = FALSE, sample_colours = sample_colours,
+                   label = "duration_mins", ltype='question', type='continuous')
+results$table
+```
+
+## Numerical summary of optional text comments
+
+```{r}
+# find all the comments:
+text_questions = filter(labels, 
+                        str_detect(pattern='Optional', labels),
+                        !str_detect(pattern='your email', labels)) %>% # not the email
+  pull(names)
+text = dplyr::select(data, 'sample', all_of(text_questions)) %>%
+  pivot_longer(cols=starts_with('q')) %>%
+  filter(!is.na(value))
+n_comments = nrow(text) # count the number of comments
+text = mutate(text, nchar = nchar(value),
+         nwords = lengths(gregexpr("\\W+", value)) + 1) %>%
+  group_by(sample, name) %>%
+  summarise(n=n(), median = round(median(nwords))) %>% # number and length of comments
+  mutate(cell = paste(n, ' / ', median, sep='')) %>%
+  dplyr::select(-n, -median) %>%
+  pivot_wider(values_from=cell, names_from=sample) %>%
+  left_join(labels, by=c('name' = 'names')) %>%
+  mutate(
+    section = str_remove_all(name, '^q|_.'),
+    labels = str_remove_all(labels, ' \\(Optional\\)')) %>%
+  dplyr::select(section, labels, `Non-random`, 'Random') 
+# table
+ftab = flextable(text) %>%
+  theme_box() %>%
+  width(j=2, width=4)
+ftab
+```
+The total number of comments was `r n_comments`.
+
+The table shows the number of comments and the median number of words.
+
+```{r}
+# to do, exclude questions not viewed for partially complete surveys?
+# test difference in number of comments
+text = dplyr::select(data, 'ID', 'sample', all_of(text_questions)) %>%
+  pivot_longer(cols=starts_with('q')) %>%
+  mutate(any_comment = !is.na(value))
+# use random intercept
+model = lme4::glmer(any_comment ~ I(sample == 'Non-random') + (1|ID), data=text, family=binomial(link='log'))
+ests = summary(model)$coefficients[2,]
+ci = confint(model)[3,]
+# convert to percent increase
+estimate = 100*(exp(ests[1]) - 1)
+conf.low  = 100*(exp(ci[1]) - 1)
+conf.high = 100*(exp(ci[2]) - 1)
+```
+
+There were more comments from the non-random sample who were `r roundz(estimate, 0)`% more likely to provide a comment, with a 95% confidence interval from `r roundz(conf.low, 0)`% to `r roundz(conf.high, 0)`%.
+
+
+# Missing data
+
+This section examines the item-missing data of missing responses to each question. The plot below shows what responses were missing, excluding optional comments. The questions are ordered according to the survey.
+
+The four panels show the missing data by sample and by their response to the question in section&nbsp;5 about whether they would write anything about career disruption for the hypothetical scenario, as these two aspects control what responses should have been completed.
+
+```{r, fig.width=8, fig.height=8}
+# remove variables that can't be missing 
+for_visdat = dplyr::select(data, 'sample', starts_with('q'))
+# remove comments
+for_visdat = dplyr::select(for_visdat, -q3_3, -q4_3, -q4_5, -q4_7, -q4_8, -q6_2, -q6_4, -q6_6, -q7_3, -q8_2, -q8_3, -q9_5,
+                    -q5_label) %>%
+  dplyr::select('sample', starts_with('q2'), starts_with('q3'), starts_with('q4'), starts_with('q5'), starts_with('q6'), starts_with('q7'), starts_with('q8'), starts_with('q9')) # ordering to match survey
+## create four plots depending on sample and answer to Q5
+#
+for_plot1 = filter(for_visdat, 
+                   sample == 'Random',
+                   q5 == 'Yes') %>%
+  dplyr::select(-sample, -q9_4, -starts_with('q6_1')) # 
+#
+for_plot2 = filter(for_visdat, 
+                   sample == 'Random',
+                   q5 == 'No') %>%
+  dplyr::select(-sample, -q9_4, -starts_with('q6_3')) # 
+#
+for_plot3 = filter(for_visdat, 
+                   sample == 'Non-random',
+                   q5 == 'Yes') %>%
+  dplyr::select(-sample, -starts_with('q6_1')) # 
+#
+for_plot4 = filter(for_visdat, 
+                   sample == 'Non-random',
+                   q5 == 'No') %>%
+  dplyr::select(-sample, -starts_with('q6_3') ) # 
+# now make plots
+plot1 = vis_dat(for_plot1, sort_type = FALSE) +
+  ggtitle('Random sample, Q5 Yes') +
+  theme(legend.position = 'none')
+plot2 = vis_dat(for_plot2, sort_type = FALSE) +
+  ggtitle('Random sample, Q5 No')+
+  theme(legend.position = 'none')
+plot3 = vis_dat(for_plot3, sort_type = FALSE) +
+  ggtitle('Non-random sample, Q5 Yes')+
+  theme(legend.position = 'none')
+plot4 = vis_dat(for_plot4, sort_type = FALSE) +
+  ggtitle('Non-random sample, Q5 No')+
+  theme(legend.position = 'none')
+
+#
+grid.arrange(plot1, plot2, plot3, plot4, nrow=2)
+```
+
+### Counts of missing data by question
+
+```{r}
+# make N per strata
+N = data.frame(group=1:4, N=c(nrow(for_plot1), nrow(for_plot2), nrow(for_plot3), nrow(for_plot4))) %>%
+  mutate(group = as.character(group))
+#
+c1 = miss_var_summary(for_plot1)
+c2 = miss_var_summary(for_plot2)
+c3 = miss_var_summary(for_plot3)
+c4 = miss_var_summary(for_plot4)
+table = bind_rows(c1, c2, c3, c4, .id='group') %>%
+  left_join(N, by='group') %>% # add sample size per strata
+  group_by(variable) %>% # group missing over four strata
+  summarise(N = sum(N), n_miss = sum(n_miss)) %>%
+  ungroup() %>%
+  mutate(pct_miss = round(100*n_miss/N)) %>%
+  arrange(pct_miss, n_miss) %>%
+  left_join(labels, by=c('variable' = 'names')) %>% # add question labels
+  dplyr::select(labels, everything(), -variable) %>%
+  mutate( # tidy up labels
+    labels = str_remove_all(labels, pattern='Now imagine you are a grant peer reviewer instead of an applicant. '),
+    labels = str_remove_all(labels, pattern='Considering medical or social circumstances you would not include, is this because - '),
+    labels = str_remove_all(labels, pattern='Considering medical or social circumstances you would include, would you - '),
+    labels = str_remove_all(labels, 'Would you not write about this career disruption because - '),
+    labels = str_remove_all(labels, 'Would you - '),
+    labels = str_sub(labels, start=1, end = 170)) %>% # truncate labels
+  rename(
+    'Question' = 'labels', 
+    'Maximum possible' = 'N',
+    'Number missing' = 'n_miss',
+    'Percent missing' = 'pct_miss') 
+
+# make table
+ftab = flextable(table) %>%
+  fontsize(size=9, part='all') %>%
+  theme_box() %>%
+  width(j=1, width=5)
+ftab
+```
+
+The three questions with the most amount of missing were the three slider questions:
+
+* _How much time away from research would you include in your career disruption section because of this issue?_ `q6_5_1`
+* _How much time would you adjust for for each applicant - Applicant who gave no details_ `q7_1_1 `
+* _How much time would you adjust for for each applicant - Applicant who explained their medical issue in detail_ `q7_1_5` 
+
+This is because respondents had to move each slider at least slightly for the question to count as answered. Hence we did a sensitivity analysis where we imputed 6 for missing results. 
+
+All other questions were reasonably well completed. 
+
+```{r, include=FALSE}
+# save results for plotting
+save(research_area_plot_random, research_area_plot_nonrandom,
+     gender_plot_random, gender_plot_nonrandom,
+     years_plot_random, years_plot_nonrandom, 
+     boxplot_grant, 
+     how_often_plot_random, how_often_plot_nonrandom,
+     aware_plot_random, aware_plot_nonrandom,
+     understand_plot_random, understand_plot_nonrandom,
+     write_anything_plot_random, write_anything_plot_nonrandom,
+     panel_plot_random, panel_plot_nonrandom,
+     comfort_plot_random, comfort_plot_nonrandom,
+     time_adjustment_plot,
+     dplot, scatter, # difference for peer reviewers,
+     file='results/plots.RData')
+```
+
